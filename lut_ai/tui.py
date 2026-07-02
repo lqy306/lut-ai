@@ -71,6 +71,7 @@ class ConfigScreen(Screen):
     BINDINGS = [
         Binding("f5",       "start_eval",   "Start"),
         Binding("escape",   "app.quit",     "Quit"),
+        Binding("tab",      "complete_path","Complete"),
         Binding("down",     "scroll_down",  "Down",  show=False),
         Binding("up",       "scroll_up",    "Up",    show=False),
         Binding("ctrl+d",   "scroll_down",  "Ctrl+D", show=False),
@@ -328,8 +329,17 @@ class ConfigScreen(Screen):
     def _update_image_info(self, path: str) -> None:
         info = self.query_one("#image-info", Label)
         resolved = self._resolve_path(path)
-        if not resolved or not os.path.isfile(resolved):
+        if not resolved:
             info.update("[red]File not found[/red]")
+            self._populate_image_list("")
+            return
+        if os.path.isdir(resolved):
+            info.update(f"[blue]Directory: {resolved}[/blue]")
+            self._populate_image_list(resolved)
+            return
+        if not os.path.isfile(resolved):
+            info.update("[red]File not found[/red]")
+            self._populate_image_list(os.path.dirname(resolved))
             return
         try:
             img = Image.open(resolved)
@@ -339,30 +349,30 @@ class ConfigScreen(Screen):
                 f"{img.width} × {img.height}  ·  "
                 f"{Path(resolved).suffix.upper()}"
             )
-            # Populate image selection list
-            self._populate_image_select(resolved)
+            self._populate_image_list(os.path.dirname(resolved),
+                                      os.path.basename(resolved))
         except Exception as e:
             info.update(f"[red]Cannot open: {e}[/red]")
 
-    def _populate_image_select(self, image_path: str) -> None:
-        """Fill the image list with images from the same dir (single-select)."""
+    def _populate_image_list(self, directory: str,
+                             highlight: str = "") -> None:
+        """Fill the image list with files from a directory."""
         lst = self.query_one("#image-list", ListView)
         lst.clear()
-        img_dir = os.path.dirname(image_path)
-        if not os.path.isdir(img_dir):
+        if not directory or not os.path.isdir(directory):
             return
         exts = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp'}
         images = sorted(
-            f for f in os.listdir(img_dir)
+            f for f in os.listdir(directory)
             if os.path.splitext(f)[1].lower() in exts
         )
         if not images:
             return
-        current_name = os.path.basename(image_path)
         for fname in images:
             item = ListItem(Label(fname))
             lst.append(item)
-            if fname == current_name:
+            if fname == highlight:
+                lst.index = len(lst) - 1
                 lst.index = len(lst) - 1
 
     def _update_lut_count(self, path: str) -> None:
@@ -435,6 +445,60 @@ class ConfigScreen(Screen):
     def action_page_up(self) -> None:
         self.query_one("#config-scroll", ScrollableContainer).scroll_page_up()
 
+    def action_complete_path(self) -> None:
+        """Tab-complete the current path input."""
+        focused = self.focused
+        if not isinstance(focused, Input):
+            return
+        input_id = focused.id
+        if input_id not in ("image-path", "lut-dir"):
+            return
+
+        raw = focused.value.strip()
+        if not raw:
+            return
+
+        # Expand ~ and resolve relative to cwd
+        expanded = os.path.expanduser(raw)
+        if not os.path.isabs(expanded):
+            expanded = os.path.join(os.getcwd(), expanded)
+
+        dirname = os.path.dirname(expanded)
+        prefix  = os.path.basename(expanded)
+
+        if not dirname or not os.path.isdir(dirname):
+            return
+
+        # Collect matching entries
+        matches = sorted(
+            e for e in os.listdir(dirname)
+            if e.lower().startswith(prefix.lower())
+        )
+        if not matches:
+            return
+
+        # Complete to longest common prefix
+        common = matches[0]
+        for m in matches[1:]:
+            i = 0
+            while i < len(common) and i < len(m) and common[i].lower() == m[i].lower():
+                i += 1
+            common = common[:i]
+
+        new_val = os.path.join(dirname if dirname != "." else "", common)
+        # If only one match and it's a directory, append /
+        if len(matches) == 1 and os.path.isdir(new_val):
+            new_val += "/"
+
+        focused.value = new_val
+        focused.cursor_position = len(new_val)
+
+        # Trigger re-listing
+        if input_id == "image-path":
+            self._update_image_info(new_val)
+        else:
+            self._update_lut_count(new_val)
+
     def action_start_eval(self) -> None:
         """Collect config and switch to processing screen."""
         cfg = AppConfig()
@@ -465,14 +529,6 @@ class ConfigScreen(Screen):
         # Collect selected items
         lut_sel = self.query_one("#lut-select", SelectionList)
         cfg.selected_luts = list(lut_sel.selected)
-        img_list = self.query_one("#image-list", ListView)
-        img_highlighted = img_list.highlighted_child
-        selected_images = []
-        if img_highlighted is not None:
-            label = img_highlighted.children[0]
-            fname = label.render() if hasattr(label, 'render') else str(label)
-            selected_images = [str(fname).strip()]
-        cfg.selected_images = selected_images
 
         cfg.language = self.query_one("#lang-input", Input).value.strip()
         if not cfg.language:
@@ -490,8 +546,6 @@ class ConfigScreen(Screen):
         errors = []
         if not cfg.image_path or not os.path.isfile(cfg.image_path):
             errors.append("Source image not found")
-        elif not cfg.selected_images:
-            errors.append("No image selected")
         if not cfg.lut_dirs[0] or not os.path.isdir(cfg.lut_dirs[0]):
             errors.append("LUT directory not found")
         elif not cfg.selected_luts:
