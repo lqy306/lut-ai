@@ -73,10 +73,12 @@ appimage: lib build/appimagetool
 
 	@echo "==> Installing Python dependencies..."
 	python3 -m pip install --target $(APPDIR)/usr/share/$(APPNAME)/deps \
-		Pillow requests rich textual --quiet \
-		--break-system-packages 2>/dev/null || \
-	python3 -m pip install --target $(APPDIR)/usr/share/$(APPNAME)/deps \
-		Pillow requests rich textual --quiet
+		Pillow requests rich textual \
+		--break-system-packages
+
+	@echo "==> Verifying PIL C extension..."
+	PYTHONPATH="$(APPDIR)/usr/share/$(APPNAME)/deps" python3 -c  \
+		"from PIL import _imaging; print('PIL C extension OK')"
 
 	@echo "==> Creating lut-ai.desktop..."
 	{ \
@@ -100,7 +102,7 @@ appimage: lib build/appimagetool
 		echo '#!/bin/bash'; \
 		echo 'HERE="$$(dirname "$$(readlink -f "$$0")")"'; \
 		echo 'APP_DIR="$$HERE/usr/share/$(APPNAME)"'; \
-		echo 'export LD_LIBRARY_PATH="$$HERE/usr/lib:$$LD_LIBRARY_PATH"'; \
+		echo 'export LD_LIBRARY_PATH="$$HERE/usr/lib:$$APP_DIR/deps/pillow.libs:$$LD_LIBRARY_PATH"'; \
 		echo 'export PYTHONPATH="$$APP_DIR:$$APP_DIR/deps:$$PYTHONPATH"'; \
 		echo ''; \
 		echo '# By default launch TUI; use --cli for terminal mode'; \
