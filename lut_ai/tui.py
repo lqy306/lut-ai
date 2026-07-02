@@ -277,17 +277,29 @@ class ConfigScreen(Screen):
     # ── Menu selection ────────────────────────────────────────────
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
-        """Switch right panel when menu item is selected."""
-        panel_map = {
-            "mi-image":    "panel-image",
-            "mi-lut":      "panel-lut",
-            "mi-options":  "panel-options",
-            "mi-advanced": "panel-advanced",
-        }
-        list_id = event.item.id if event.item else None
-        if list_id and list_id in panel_map:
-            sw = self.query_one("#config-panels", ContentSwitcher)
-            sw.current = panel_map[list_id]
+        """Handle selection from any ListView — menu or image list."""
+        if event.list_view.id == "config-menu":
+            # Switch right panel when menu item is selected
+            panel_map = {
+                "mi-image":    "panel-image",
+                "mi-lut":      "panel-lut",
+                "mi-options":  "panel-options",
+                "mi-advanced": "panel-advanced",
+            }
+            list_id = event.item.id if event.item else None
+            if list_id and list_id in panel_map:
+                sw = self.query_one("#config-panels", ContentSwitcher)
+                sw.current = panel_map[list_id]
+        elif event.list_view.id == "image-list" and event.item:
+            # Update image path when an image is selected
+            label = event.item.children[0]
+            fname = label.render() if hasattr(label, 'render') else str(label)
+            input_widget = self.query_one("#image-path", Input)
+            img_dir = os.path.dirname(input_widget.value)
+            if not img_dir or img_dir == ".":
+                img_dir = os.getcwd()
+            input_widget.value = os.path.join(img_dir, str(fname).strip())
+            self._update_image_info(input_widget.value)
 
     def _update_switch_label(self) -> None:
         """Update ON/OFF label next to the AI switch."""
@@ -408,20 +420,6 @@ class ConfigScreen(Screen):
             event: SelectionList.SelectionChanged) -> None:
         if event.selection_list.id == "lut-select":
             self._update_lut_select_count()
-
-    # ── Image list selection (single-select) ────────────────────────
-
-    def on_list_view_selected(self, event: ListView.Selected) -> None:
-        """Update image path when an image is selected in the list."""
-        if event.list_view.id == "image-list" and event.item:
-            label = event.item.children[0]
-            fname = label.render() if hasattr(label, 'render') else str(label)
-            input_widget = self.query_one("#image-path", Input)
-            img_dir = os.path.dirname(input_widget.value)
-            if not img_dir or img_dir == ".":
-                img_dir = os.getcwd()
-            input_widget.value = os.path.join(img_dir, str(fname).strip())
-            self._update_image_info(input_widget.value)
 
     # ── Scroll actions ──────────────────────────────────────────────
 
