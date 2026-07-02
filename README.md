@@ -3,6 +3,9 @@
 > **5 月就做完了，直到 7 月才提交到 GitHub。**  
 > 这个项目本来 5 月就好了，但一直拖到现在才上传。拖延是病，但代码没病。
 
+> **初中生作品，代码由 Claude Code 生成。**  
+> 作为初中生，我不可能手写这些软件，所以这些代码大部分是 Claude Code 生成的。
+
 一套给 LUT（Look-Up Table）调色效果打分的工具链。选一张照片，扔进一堆 `.cube` LUT，立刻看到每款 LUT 的视觉效果评分、风格标签和 AI 评语。
 
 **核心引擎：ANSI C99（BSD Allman 风格）+ Python ctypes 绑定 + Textual TUI。**
