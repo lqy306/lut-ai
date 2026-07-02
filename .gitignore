@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# C core
+core/*.o
+core/*.so
+
+# AppImage
+*.AppImage
+build/
+
+# Logs
+*.log
+
+# LUT files (keep in repo only if they are test samples)
+*.cube
+
+# Environment
+.env
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project-specific
+lut_ai/__pycache__/
