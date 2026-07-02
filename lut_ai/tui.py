@@ -112,13 +112,7 @@ class ConfigScreen(Screen):
                             Input(placeholder="Image path (e.g. ./photo.jpg)",
                                   id="image-path", value=self._default_image()),
                             Label("", id="image-info", classes="hint"),
-                            SelectionList(id="image-select", compact=True),
-                            Horizontal(
-                                Button("Select All", id="img-select-all"),
-                                Button("Deselect All", id="img-deselect-all"),
-                                Label("", id="img-select-count", classes="hint"),
-                                classes="select-buttons",
-                            ),
+                            ListView(id="image-list"),
                             id="panel-image",
                         ),
                         # Panel: LUT Directory
@@ -339,9 +333,9 @@ class ConfigScreen(Screen):
             info.update(f"[red]Cannot open: {e}[/red]")
 
     def _populate_image_select(self, image_path: str) -> None:
-        """Fill the image selection list with images from the same dir."""
-        sel = self.query_one("#image-select", SelectionList)
-        sel.clear_options()
+        """Fill the image list with images from the same dir (single-select)."""
+        lst = self.query_one("#image-list", ListView)
+        lst.clear()
         img_dir = os.path.dirname(image_path)
         if not os.path.isdir(img_dir):
             return
@@ -354,8 +348,10 @@ class ConfigScreen(Screen):
             return
         current_name = os.path.basename(image_path)
         for fname in images:
-            sel.add_option((fname, fname, fname == current_name))
-        self._update_image_select_count()
+            item = ListItem(Label(fname))
+            lst.append(item)
+            if fname == current_name:
+                lst.index = len(lst) - 1
 
     def _update_lut_count(self, path: str) -> None:
         label = self.query_one("#lut-count", Label)
@@ -376,16 +372,6 @@ class ConfigScreen(Screen):
             sel.add_option((name, name, True))
         self._update_lut_select_count()
 
-    def _update_image_select_count(self) -> None:
-        sel = self.query_one("#image-select", SelectionList)
-        total = len(list(sel.options))
-        n = len(sel.selected)
-        lbl = self.query_one("#img-select-count", Label)
-        if total:
-            lbl.update(f"Selected {n}/{total}")
-        else:
-            lbl.update("")
-
     def _update_lut_select_count(self) -> None:
         sel = self.query_one("#lut-select", SelectionList)
         total = len(list(sel.options))
@@ -403,22 +389,10 @@ class ConfigScreen(Screen):
             self.action_start_eval()
         elif event.button.id == "quit-btn":
             self.app.exit()
-        elif event.button.id == "img-select-all":
-            self._image_select_all()
-        elif event.button.id == "img-deselect-all":
-            self._image_deselect_all()
         elif event.button.id == "lut-select-all":
             self._lut_select_all()
         elif event.button.id == "lut-deselect-all":
             self._lut_deselect_all()
-
-    def _image_select_all(self) -> None:
-        self.query_one("#image-select", SelectionList).select_all()
-        self._update_image_select_count()
-
-    def _image_deselect_all(self) -> None:
-        self.query_one("#image-select", SelectionList).deselect_all()
-        self._update_image_select_count()
 
     def _lut_select_all(self) -> None:
         self.query_one("#lut-select", SelectionList).select_all()
@@ -434,8 +408,20 @@ class ConfigScreen(Screen):
             event: SelectionList.SelectionChanged) -> None:
         if event.selection_list.id == "lut-select":
             self._update_lut_select_count()
-        elif event.selection_list.id == "image-select":
-            self._update_image_select_count()
+
+    # ── Image list selection (single-select) ────────────────────────
+
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        """Update image path when an image is selected in the list."""
+        if event.list_view.id == "image-list" and event.item:
+            label = event.item.children[0]
+            fname = label.render() if hasattr(label, 'render') else str(label)
+            input_widget = self.query_one("#image-path", Input)
+            img_dir = os.path.dirname(input_widget.value)
+            if not img_dir or img_dir == ".":
+                img_dir = os.getcwd()
+            input_widget.value = os.path.join(img_dir, str(fname).strip())
+            self._update_image_info(input_widget.value)
 
     # ── Scroll actions ──────────────────────────────────────────────
 
@@ -481,8 +467,14 @@ class ConfigScreen(Screen):
         # Collect selected items
         lut_sel = self.query_one("#lut-select", SelectionList)
         cfg.selected_luts = list(lut_sel.selected)
-        img_sel = self.query_one("#image-select", SelectionList)
-        cfg.selected_images = list(img_sel.selected)
+        img_list = self.query_one("#image-list", ListView)
+        img_highlighted = img_list.highlighted_child
+        selected_images = []
+        if img_highlighted is not None:
+            label = img_highlighted.children[0]
+            fname = label.render() if hasattr(label, 'render') else str(label)
+            selected_images = [str(fname).strip()]
+        cfg.selected_images = selected_images
 
         cfg.language = self.query_one("#lang-input", Input).value.strip()
         if not cfg.language:
